@@ -37,6 +37,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterators;
 
 import java.io.IOException;
+import java.util.List;
 
 import javax.annotation.Nullable;
 
@@ -59,27 +60,36 @@ public class BuildCommand extends AbstractCommandRunner<BuildCommandOptions> {
     ArtifactCache artifactCache = getArtifactCache(params, options);
 
 
-    if (options.getArguments().isEmpty()) {
-      params.getConsole().printBuildFailure("Must specify at least one build target.");
+    List<String> arguments = options.getArguments();
+    if (arguments.isEmpty()) {
+      // If a default target is defined in .buckconfig, we use that.
+      String defaultTarget = params.getBuckConfig().getDefaultTarget();
+      if (defaultTarget != null) {
+        arguments.add(defaultTarget);
+      } else {
+        params.getConsole().printBuildFailure(
+            "Must specify at least one build target or define a default " +
+            "target in .buckconfig.");
 
-      // If there are aliases defined in .buckconfig, suggest that the user
-      // build one of them. We show the user only the first 10 aliases.
-      ImmutableSet<String> aliases = params.getBuckConfig().getAliases();
-      if (!aliases.isEmpty()) {
-        params.getConsole().getStdErr().println(String.format(
-            "Try building one of the following targets:\n%s",
-            Joiner.on(' ').join(Iterators.limit(aliases.iterator(), 10))));
+        // If there are aliases defined in .buckconfig, suggest that the user
+        // build one of them. We show the user only the first 10 aliases.
+        ImmutableSet<String> aliases = params.getBuckConfig().getAliases();
+        if (!aliases.isEmpty()) {
+          params.getConsole().getStdErr().println(String.format(
+              "Try building one of the following targets:\n%s",
+              Joiner.on(' ').join(Iterators.limit(aliases.iterator(), 10))));
+        }
+        return 1;
       }
-      return 1;
     }
 
     // Post the build started event, setting it to the Parser recorded start time if appropriate.
     if (params.getParser().getParseStartTime().isPresent()) {
       params.getBuckEventBus().post(
-          BuildEvent.started(options.getArguments()),
+          BuildEvent.started(arguments),
           params.getParser().getParseStartTime().get());
     } else {
-      params.getBuckEventBus().post(BuildEvent.started(options.getArguments()));
+      params.getBuckEventBus().post(BuildEvent.started(arguments));
     }
 
     // Parse the build files to create a ActionGraph.
@@ -90,7 +100,7 @@ public class BuildCommand extends AbstractCommandRunner<BuildCommandOptions> {
               options.parseArgumentsAsTargetNodeSpecs(
                   params.getBuckConfig(),
                   params.getRepository().getFilesystem().getIgnorePaths(),
-                  options.getArguments()),
+                  arguments),
               new ParserConfig(params.getBuckConfig()),
               params.getBuckEventBus(),
               params.getConsole(),
@@ -130,7 +140,7 @@ public class BuildCommand extends AbstractCommandRunner<BuildCommandOptions> {
           options.isKeepGoing(),
           params.getConsole(),
           options.getPathToBuildReport(params.getBuckConfig()));
-      params.getBuckEventBus().post(BuildEvent.finished(options.getArguments(), exitCode));
+      params.getBuckEventBus().post(BuildEvent.finished(arguments, exitCode));
       return exitCode;
     }
   }

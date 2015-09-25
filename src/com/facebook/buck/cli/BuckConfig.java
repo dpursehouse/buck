@@ -442,6 +442,10 @@ public class BuckConfig {
     return this.aliasToBuildTargetMap.keySet();
   }
 
+  public String getDefaultTarget() {
+    return getValue("build", "default").orNull();
+  }
+
   public long getDefaultTestTimeoutMillis() {
     return Long.parseLong(getValue("test", "timeout").or("0"));
   }
